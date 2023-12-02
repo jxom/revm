@@ -367,13 +367,56 @@ pub fn static_call<H: Host, SPEC: Spec>(interpreter: &mut Interpreter<'_>, host:
 }
 
 // EIP-3074
-pub fn auth<H: Host, SPEC: Spec>(interpreter: &mut Interpreter<'_>, _host: &mut H) {
+pub fn auth<H: Host, SPEC: Spec>(interpreter: &mut Interpreter<'_>, host: &mut H) {
     // Pop the `authority` off of the stack
     pop_address!(interpreter, authority);
-    // Pop the signature offset off of the stack
-    pop!(interpreter, signature_offset);
-    // Pop the signature length off of the stack
-    pop!(interpreter, signature_len);
+    // Pop the signature offset and length off of the stack
+    pop!(interpreter, signature_offset, signature_len);
+
+    // Grab the memory region for the input data
+    let mem_slice = interpreter.shared_memory.slice(
+        signature_offset.try_into().unwrap_or_default(),
+        signature_len.try_into().unwrap_or_default(),
+    );
+
+    // Pull the signature from the first 65 bytes of the memory region.
+    let signature = {
+        // Place the yParity value, located at the first byte, in the last byte.
+        let mut sig = [0u8; 65];
+        sig[0..64].copy_from_slice(&mem_slice[1..65]);
+        sig[64] = mem_slice[0];
+        sig
+    };
+
+    // If the memory region is longer than 65 bytes, pull the commit from the next [1, 32] bytes.
+    let commit = (mem_slice.len() > 65).then(|| {
+        let mut buf = B256::ZERO;
+        let len_diff = mem_slice.len() - 65;
+        let cpy_size = if len_diff > 32 { 32 } else { len_diff };
+        buf[0..len_diff].copy_from_slice(&mem_slice[65..65 + cpy_size]);
+        buf
+    });
+
+    // Build the original auth message and compute the hash.
+    let mut message = [0u8; 96];
+    message[0..32].copy_from_slice(
+        U256::from(host.env().cfg.chain_id)
+            .to_be_bytes::<32>()
+            .as_ref(),
+    );
+    message[32..64].copy_from_slice(interpreter.contract().address.into_word().as_ref());
+    message[64..96].copy_from_slice(commit.unwrap_or_default().as_ref());
+    let message_hash = revm_primitives::keccak256(&message);
+
+    // Verify the signature
+    let recovered = secp256k1::ecrecover(&signature, &message_hash);
+
+    if recovered.is_err() || Address::from_word(recovered.unwrap_or_default()) != authority {
+        push!(interpreter, U256::ZERO);
+    } else {
+        push!(interpreter, U256::from(1));
+        // TODO: Set `authorized` context.
+    }
 }
 
 // EIP-3074
@@ -607,5 +650,28 @@ pub fn call_inner<SPEC: Spec, H: Host>(
         _ => {
             push!(interpreter, U256::ZERO);
         }
+    }
+}
+
+// TODO: This was copied from `revm-precompile`. It's not exposed and sits behind the `secp256k1`
+// feature flag, so if we want to clean this up, we'll have to share that.
+#[allow(clippy::module_inception)]
+mod secp256k1 {
+    use revm_primitives::{keccak256, B256};
+    use secp256k1::{
+        ecdsa::{RecoverableSignature, RecoveryId},
+        Message, Secp256k1,
+    };
+
+    pub(crate) fn ecrecover(sig: &[u8; 65], msg: &B256) -> Result<B256, secp256k1::Error> {
+        let sig =
+            RecoverableSignature::from_compact(&sig[0..64], RecoveryId::from_i32(sig[64] as i32)?)?;
+
+        let secp = Secp256k1::new();
+        let public = secp.recover_ecdsa(&Message::from_digest_slice(&msg[..])?, &sig)?;
+
+        let mut hash = keccak256(&public.serialize_uncompressed()[1..]);
+        hash[..12].fill(0);
+        Ok(hash)
     }
 }
