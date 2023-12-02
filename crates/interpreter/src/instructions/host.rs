@@ -366,6 +366,21 @@ pub fn static_call<H: Host, SPEC: Spec>(interpreter: &mut Interpreter<'_>, host:
     call_inner::<SPEC, H>(CallScheme::StaticCall, interpreter, host);
 }
 
+// EIP-3074
+pub fn auth<H: Host, SPEC: Spec>(interpreter: &mut Interpreter<'_>, _host: &mut H) {
+    // Pop the `authority` off of the stack
+    pop_address!(interpreter, authority);
+    // Pop the signature offset off of the stack
+    pop!(interpreter, signature_offset);
+    // Pop the signature length off of the stack
+    pop!(interpreter, signature_len);
+}
+
+// EIP-3074
+pub fn auth_call<H: Host, SPEC: Spec>(interpreter: &mut Interpreter<'_>, host: &mut H) {
+    call_inner::<SPEC, H>(CallScheme::AuthCall, interpreter, host);
+}
+
 #[inline(never)]
 fn prepare_call_inputs<H: Host, SPEC: Spec>(
     interpreter: &mut Interpreter<'_>,
@@ -393,6 +408,8 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
             value
         }
         CallScheme::DelegateCall | CallScheme::StaticCall => U256::ZERO,
+        // TODO: EIP-3074
+        CallScheme::AuthCall => U256::ZERO,
     };
 
     pop!(interpreter, in_offset, in_len, out_offset, out_len);
@@ -437,6 +454,16 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
             apparent_value: interpreter.contract.value,
             scheme,
         },
+        CallScheme::AuthCall => {
+            CallContext {
+                address: interpreter.contract.address,
+                // TODO: Should be auth caller, need context var
+                caller: interpreter.contract.caller,
+                code_address: to,
+                apparent_value: interpreter.contract.value, // TODO: Prob not correct, check spec
+                scheme,
+            }
+        }
     };
 
     let transfer = if scheme == CallScheme::Call {

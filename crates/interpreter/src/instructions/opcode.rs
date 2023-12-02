@@ -352,8 +352,8 @@ opcodes! {
     0xF3 => RETURN       => control::ret,
     0xF4 => DELEGATECALL => host::delegate_call::<H, SPEC>,
     0xF5 => CREATE2      => host::create::<true, H, SPEC>,
-    // 0xF6
-    // 0xF7
+    0xF6 => AUTH         => host::auth::<H, SPEC>,
+    0xF7 => AUTHCALL     => host::auth_call::<H, SPEC>,
     // 0xF8
     // 0xF9
     0xFA => STATICCALL   => host::static_call::<H, SPEC>,
@@ -582,20 +582,24 @@ const fn opcode_gas_info(opcode: u8, spec: SpecId) -> OpInfo {
         CODESIZE => OpInfo::gas(gas::BASE),
         CODECOPY => OpInfo::dynamic_gas(),
         GASPRICE => OpInfo::gas(gas::BASE),
-        EXTCODESIZE => OpInfo::gas(if SpecId::enabled(spec, SpecId::BERLIN) {
-            gas::WARM_STORAGE_READ_COST // add only part of gas
-        } else if SpecId::enabled(spec, SpecId::TANGERINE) {
-            700
-        } else {
-            20
-        }),
-        EXTCODECOPY => OpInfo::gas(if SpecId::enabled(spec, SpecId::BERLIN) {
-            gas::WARM_STORAGE_READ_COST // add only part of gas
-        } else if SpecId::enabled(spec, SpecId::TANGERINE) {
-            700
-        } else {
-            20
-        }),
+        EXTCODESIZE => {
+            OpInfo::gas(if SpecId::enabled(spec, SpecId::BERLIN) {
+                gas::WARM_STORAGE_READ_COST // add only part of gas
+            } else if SpecId::enabled(spec, SpecId::TANGERINE) {
+                700
+            } else {
+                20
+            })
+        }
+        EXTCODECOPY => {
+            OpInfo::gas(if SpecId::enabled(spec, SpecId::BERLIN) {
+                gas::WARM_STORAGE_READ_COST // add only part of gas
+            } else if SpecId::enabled(spec, SpecId::TANGERINE) {
+                700
+            } else {
+                20
+            })
+        }
         RETURNDATASIZE => OpInfo::gas(if SpecId::enabled(spec, SpecId::BYZANTIUM) {
             gas::BASE
         } else {
