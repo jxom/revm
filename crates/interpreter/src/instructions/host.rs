@@ -519,7 +519,7 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
         CallScheme::AuthCall => {
             if let Some(account) = interpreter.authorized {
                 CallContext {
-                    address: interpreter.contract.address,
+                    address: to,
                     caller: account,
                     code_address: to,
                     apparent_value: value,
