@@ -408,8 +408,20 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
             value
         }
         CallScheme::DelegateCall | CallScheme::StaticCall => U256::ZERO,
-        // TODO: EIP-3074
-        CallScheme::AuthCall => U256::ZERO,
+        CallScheme::AuthCall => {
+            pop!(interpreter, value);
+            value
+        },
+    };
+
+    if scheme == CallScheme::AuthCall {
+        pop!(interpreter, ext_value);
+        // ext_value must be 0 or it reverts
+        if ext_value != U256::ZERO {
+            // TODO: new InstructionResult enum
+            interpreter.instruction_result = InstructionResult::FatalExternalError;
+            return;
+        }
     };
 
     pop!(interpreter, in_offset, in_len, out_offset, out_len);
