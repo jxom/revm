@@ -406,7 +406,7 @@ pub fn auth<H: Host, SPEC: Spec>(interpreter: &mut Interpreter<'_>, host: &mut H
 
     // Build the original auth message and compute the hash.
     let mut message = [0u8; 97];
-    message[0] = 0x03; // AUTH_MAGIC - add constant?
+    message[0] = 0x04; // AUTH_MAGIC - add constant?
     message[1..33].copy_from_slice(
         U256::from(host.env().cfg.chain_id)
             .to_be_bytes::<32>()
