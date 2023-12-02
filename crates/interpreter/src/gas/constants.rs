@@ -39,3 +39,6 @@ pub const WARM_STORAGE_READ_COST: u64 = 100;
 pub const INITCODE_WORD_COST: u64 = 2;
 
 pub const CALL_STIPEND: u64 = 2300;
+
+// EIP-3074: AUTH and AUTHCALL
+pub const AUTH: u64 = 3100;

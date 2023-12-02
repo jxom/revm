@@ -373,11 +373,17 @@ pub fn auth<H: Host, SPEC: Spec>(interpreter: &mut Interpreter<'_>, host: &mut H
     // Pop the signature offset and length off of the stack
     pop!(interpreter, signature_offset, signature_len);
 
-    // Grab the memory region for the input data
-    let mem_slice = interpreter.shared_memory.slice(
-        signature_offset.try_into().unwrap_or_default(),
-        signature_len.try_into().unwrap_or_default(),
-    );
+    let signature_offset = as_usize_or_fail!(interpreter, signature_offset);
+    let signature_len = as_usize_or_fail!(interpreter, signature_len);
+
+    // Charge the fixed cost for the `AUTH` opcode
+    gas!(interpreter, gas::AUTH);
+
+    // Grab the memory region for the input data and charge for any memory expansion
+    shared_memory_resize!(interpreter, signature_offset, signature_len);
+    let mem_slice = interpreter
+        .shared_memory
+        .slice(signature_offset, signature_len);
 
     // Pull the signature from the first 65 bytes of the memory region.
     let signature = {
@@ -398,14 +404,15 @@ pub fn auth<H: Host, SPEC: Spec>(interpreter: &mut Interpreter<'_>, host: &mut H
     });
 
     // Build the original auth message and compute the hash.
-    let mut message = [0u8; 96];
-    message[0..32].copy_from_slice(
+    let mut message = [0u8; 97];
+    message[0] = 0x03; // AUTH_MAGIC
+    message[1..33].copy_from_slice(
         U256::from(host.env().cfg.chain_id)
             .to_be_bytes::<32>()
             .as_ref(),
     );
-    message[32..64].copy_from_slice(interpreter.contract().address.into_word().as_ref());
-    message[64..96].copy_from_slice(commit.unwrap_or_default().as_ref());
+    message[33..65].copy_from_slice(interpreter.contract().address.into_word().as_ref());
+    message[65..97].copy_from_slice(commit.unwrap_or_default().as_ref());
     let message_hash = revm_primitives::keccak256(&message);
 
     // Verify the signature
@@ -454,7 +461,7 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
         CallScheme::AuthCall => {
             pop!(interpreter, value);
             value
-        },
+        }
     };
 
     if scheme == CallScheme::AuthCall {
