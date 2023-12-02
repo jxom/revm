@@ -423,7 +423,7 @@ pub fn auth<H: Host, SPEC: Spec>(interpreter: &mut Interpreter<'_>, host: &mut H
         push!(interpreter, U256::ZERO);
     } else {
         push!(interpreter, U256::from(1));
-        interpreter.active_account = Some(authority);
+        interpreter.authorized = Some(authority);
     }
 }
 
@@ -517,7 +517,7 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
             scheme,
         },
         CallScheme::AuthCall => {
-            if let Some(account) = interpreter.active_account {
+            if let Some(account) = interpreter.authorized {
                 CallContext {
                     address: interpreter.contract.address,
                     caller: account,
@@ -532,7 +532,7 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
         }
     };
 
-    let transfer = if scheme == CallScheme::Call {
+    let transfer = if matches!(scheme, CallScheme::Call | CallScheme::AuthCall) {
         Transfer {
             source: interpreter.contract.address,
             target: to,
@@ -542,16 +542,6 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
         Transfer {
             source: interpreter.contract.address,
             target: interpreter.contract.address,
-            value,
-        }
-    } else if scheme == CallScheme::AuthCall {
-        Transfer {
-            // TODO(clabby) - this is a lil smelly, but guaranteed to be `Some` due to the check
-            // above.
-            source: interpreter
-                .active_account
-                .expect("unreachable: active account unset after explicit check"),
-            target: to,
             value,
         }
     } else {

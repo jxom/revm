@@ -46,7 +46,7 @@ pub struct Interpreter<'a> {
     /// Whether the interpreter is in "staticcall" mode, meaning no state changes can happen.
     pub is_static: bool,
     /// EIP-3074: Active account for `AUTHCALL` instructions in the current execution frame.
-    pub active_account: Option<Address>,
+    pub authorized: Option<Address>,
 }
 
 impl<'a> Interpreter<'a> {
@@ -68,7 +68,7 @@ impl<'a> Interpreter<'a> {
             return_offset: 0,
             shared_memory,
             stack: Stack::new(),
-            active_account: None,
+            authorized: None,
         }
     }
 
