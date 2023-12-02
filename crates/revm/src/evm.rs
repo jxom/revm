@@ -215,8 +215,8 @@ pub fn evm_inner<'a, DB: Database>(
         }
         SpecId::MERGE => create_evm!(MergeSpec),
         SpecId::SHANGHAI => create_evm!(ShanghaiSpec),
-        SpecId::CANCUN => create_evm!(CancunSpec),
         SpecId::PRAGUE => create_evm!(PragueSpec),
+        SpecId::CANCUN => create_evm!(CancunSpec),
         SpecId::LATEST => create_evm!(LatestSpec),
         #[cfg(feature = "optimism")]
         SpecId::BEDROCK => create_evm!(BedrockSpec),

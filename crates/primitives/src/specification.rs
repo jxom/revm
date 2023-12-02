@@ -27,8 +27,8 @@ pub enum SpecId {
     GRAY_GLACIER = 14,    // Gray Glacier	        15050000
     MERGE = 15,           // Paris/Merge	        15537394 (TTD: 58750000000000000000000)
     SHANGHAI = 16,        // Shanghai	            17034870 (TS: 1681338455)
-    CANCUN = 17,          // Cancun	                TBD
-    PRAGUE = 18,          // Prague                 TBD
+    PRAGUE = 17,          // Prague                 TBD
+    CANCUN = 18,          // Cancun	                TBD
     LATEST = u8::MAX,
 }
 
@@ -60,8 +60,8 @@ pub enum SpecId {
     REGOLITH = 17,
     SHANGHAI = 18,
     CANYON = 19,
-    CANCUN = 20,
-    PRAGUE = 21,
+    PRAGUE = 20,
+    CANCUN = 21,
     LATEST = u8::MAX,
 }
 
