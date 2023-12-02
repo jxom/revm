@@ -393,19 +393,20 @@ pub fn auth<H: Host, SPEC: Spec>(interpreter: &mut Interpreter<'_>, host: &mut H
         sig[64] = mem_slice[0];
         sig
     };
+    let sig_len = signature.len();
 
     // If the memory region is longer than 65 bytes, pull the commit from the next [1, 32] bytes.
-    let commit = (mem_slice.len() > 65).then(|| {
+    let commit = (mem_slice.len() > sig_len).then(|| {
         let mut buf = B256::ZERO;
-        let len_diff = mem_slice.len() - 65;
-        let cpy_size = if len_diff > 32 { 32 } else { len_diff };
-        buf[0..len_diff].copy_from_slice(&mem_slice[65..65 + cpy_size]);
+        let remaining = mem_slice.len() - sig_len;
+        let cpy_size = (remaining > 32).then_some(32).unwrap_or(remaining);
+        buf[0..remaining].copy_from_slice(&mem_slice[sig_len..sig_len + cpy_size]);
         buf
     });
 
     // Build the original auth message and compute the hash.
     let mut message = [0u8; 97];
-    message[0] = 0x03; // AUTH_MAGIC
+    message[0] = 0x03; // AUTH_MAGIC - add constant?
     message[1..33].copy_from_slice(
         U256::from(host.env().cfg.chain_id)
             .to_be_bytes::<32>()
@@ -545,7 +546,11 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
         }
     } else if scheme == CallScheme::AuthCall {
         Transfer {
-            source: interpreter.active_account.unwrap_or_default(),
+            // TODO(clabby) - this is a lil smelly, but guaranteed to be `Some` due to the check
+            // above.
+            source: interpreter
+                .active_account
+                .expect("unreachable: active account unset after explicit check"),
             target: to,
             value,
         }
