@@ -422,7 +422,7 @@ pub fn auth<H: Host, SPEC: Spec>(interpreter: &mut Interpreter<'_>, host: &mut H
         push!(interpreter, U256::ZERO);
     } else {
         push!(interpreter, U256::from(1));
-        // TODO: Set `authorized` context.
+        interpreter.active_account = Some(authority);
     }
 }
 
@@ -466,10 +466,9 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
 
     if scheme == CallScheme::AuthCall {
         pop!(interpreter, ext_value);
-        // ext_value must be 0 or it reverts
+        // If `ext_value` is non-zero, then the `AUTHCALL` opcode immediately returns 0.
         if ext_value != U256::ZERO {
-            // TODO: new InstructionResult enum
-            interpreter.instruction_result = InstructionResult::FatalExternalError;
+            push!(interpreter, U256::ZERO);
             return;
         }
     };
@@ -517,13 +516,17 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
             scheme,
         },
         CallScheme::AuthCall => {
-            CallContext {
-                address: interpreter.contract.address,
-                // TODO: Should be auth caller, need context var
-                caller: interpreter.contract.caller,
-                code_address: to,
-                apparent_value: interpreter.contract.value, // TODO: Prob not correct, check spec
-                scheme,
+            if let Some(account) = interpreter.active_account {
+                CallContext {
+                    address: interpreter.contract.address,
+                    caller: account,
+                    code_address: to,
+                    apparent_value: value,
+                    scheme,
+                }
+            } else {
+                interpreter.instruction_result = InstructionResult::ActiveAccountUnsetAuthCall;
+                return;
             }
         }
     };
@@ -541,15 +544,10 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
             value,
         }
     } else if scheme == CallScheme::AuthCall {
-        if let Some(account) = interpreter.active_account {
-            Transfer {
-                source: account,
-                target: to,
-                value,
-            }
-        } else {
-            interpreter.instruction_result = InstructionResult::ActiveAccountUnsetAuthCall;
-            return;
+        Transfer {
+            source: interpreter.active_account.unwrap_or_default(),
+            target: to,
+            value,
         }
     } else {
         //this is dummy send for StaticCall and DelegateCall, it should do nothing and dont touch anything.
