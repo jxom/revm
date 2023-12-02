@@ -540,6 +540,17 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
             target: interpreter.contract.address,
             value,
         }
+    } else if scheme == CallScheme::AuthCall {
+        if let Some(account) = interpreter.active_account {
+            Transfer {
+                source: account,
+                target: to,
+                value,
+            }
+        } else {
+            interpreter.instruction_result = InstructionResult::ActiveAccountUnsetAuthCall;
+            return;
+        }
     } else {
         //this is dummy send for StaticCall and DelegateCall, it should do nothing and dont touch anything.
         Transfer {
@@ -556,6 +567,7 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
     };
     let is_new = !exist;
 
+    // TODO(clabby): EIP-3074 - AuthCall needs coverage
     gas!(
         interpreter,
         gas::call_cost::<SPEC>(
