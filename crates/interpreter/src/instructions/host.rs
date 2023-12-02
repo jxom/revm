@@ -604,6 +604,8 @@ pub fn call_inner<SPEC: Spec, H: Host>(
         CallScheme::DelegateCall => check!(interpreter, HOMESTEAD),
         // EIP-214: New opcode STATICCALL
         CallScheme::StaticCall => check!(interpreter, BYZANTIUM),
+        // EIP-3074: New opcode AUTHCALL
+        CallScheme::AuthCall => check!(interpreter, PRAGUE),
         _ => (),
     }
     interpreter.return_data_buffer = Bytes::new();

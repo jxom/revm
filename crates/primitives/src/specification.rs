@@ -28,6 +28,7 @@ pub enum SpecId {
     MERGE = 15,           // Paris/Merge	        15537394 (TTD: 58750000000000000000000)
     SHANGHAI = 16,        // Shanghai	            17034870 (TS: 1681338455)
     CANCUN = 17,          // Cancun	                TBD
+    PRAGUE = 18,          // Prague                 TBD
     LATEST = u8::MAX,
 }
 
@@ -60,6 +61,7 @@ pub enum SpecId {
     SHANGHAI = 18,
     CANYON = 19,
     CANCUN = 20,
+    PRAGUE = 21,
     LATEST = u8::MAX,
 }
 
@@ -92,6 +94,7 @@ impl From<&str> for SpecId {
             "Merge" => Self::MERGE,
             "Shanghai" => Self::SHANGHAI,
             "Cancun" => Self::CANCUN,
+            "Prague" => Self::PRAGUE,
             #[cfg(feature = "optimism")]
             "Bedrock" => SpecId::BEDROCK,
             #[cfg(feature = "optimism")]
@@ -143,6 +146,7 @@ spec!(LONDON, LondonSpec);
 spec!(MERGE, MergeSpec);
 spec!(SHANGHAI, ShanghaiSpec);
 spec!(CANCUN, CancunSpec);
+spec!(PRAGUE, PragueSpec);
 spec!(LATEST, LatestSpec);
 
 // Optimism Hardforks

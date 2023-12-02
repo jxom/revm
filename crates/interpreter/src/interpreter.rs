@@ -5,6 +5,7 @@ mod stack;
 
 pub use analysis::BytecodeLocked;
 pub use contract::Contract;
+use revm_primitives::Address;
 pub use shared_memory::{next_multiple_of_32, SharedMemory};
 pub use stack::{Stack, STACK_LIMIT};
 
@@ -45,6 +46,8 @@ pub struct Interpreter<'a> {
     pub return_len: usize,
     /// Whether the interpreter is in "staticcall" mode, meaning no state changes can happen.
     pub is_static: bool,
+    /// EIP-3074: Active account for `AUTHCALL` instructions in the current execution frame.
+    pub active_account: Option<Address>,
 }
 
 impl<'a> Interpreter<'a> {
@@ -66,6 +69,7 @@ impl<'a> Interpreter<'a> {
             return_offset: 0,
             shared_memory,
             stack: Stack::new(),
+            active_account: None,
         }
     }
 
