@@ -416,7 +416,7 @@ pub fn auth<H: Host, SPEC: Spec>(interpreter: &mut Interpreter<'_>, host: &mut H
     let message_hash = revm_primitives::keccak256(&message);
 
     // Verify the signature
-    let recovered = secp256k1::ecrecover(&signature, &message_hash);
+    let recovered = revm_primitives::secp256k1::ecrecover(&signature, &message_hash);
 
     if recovered.is_err() || Address::from_word(recovered.unwrap_or_default()) != authority {
         push!(interpreter, U256::ZERO);
@@ -669,28 +669,5 @@ pub fn call_inner<SPEC: Spec, H: Host>(
         _ => {
             push!(interpreter, U256::ZERO);
         }
-    }
-}
-
-// TODO: This was copied from `revm-precompile`. It's not exposed and sits behind the `secp256k1`
-// feature flag, so if we want to clean this up, we'll have to share that.
-#[allow(clippy::module_inception)]
-mod secp256k1 {
-    use revm_primitives::{keccak256, B256};
-    use secp256k1::{
-        ecdsa::{RecoverableSignature, RecoveryId},
-        Message, Secp256k1,
-    };
-
-    pub(crate) fn ecrecover(sig: &[u8; 65], msg: &B256) -> Result<B256, secp256k1::Error> {
-        let sig =
-            RecoverableSignature::from_compact(&sig[0..64], RecoveryId::from_i32(sig[64] as i32)?)?;
-
-        let secp = Secp256k1::new();
-        let public = secp.recover_ecdsa(&Message::from_digest_slice(&msg[..])?, &sig)?;
-
-        let mut hash = keccak256(&public.serialize_uncompressed()[1..]);
-        hash[..12].fill(0);
-        Ok(hash)
     }
 }
