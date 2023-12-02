@@ -834,8 +834,8 @@ const fn opcode_gas_info(opcode: u8, spec: SpecId) -> OpInfo {
         RETURN => OpInfo::gas_block_end(0),
         DELEGATECALL => OpInfo::gas_block_end(0),
         CREATE2 => OpInfo::gas_block_end(0),
-        0xF6 => OpInfo::none(),
-        0xF7 => OpInfo::none(),
+        AUTH => OpInfo::dynamic_gas(),
+        AUTHCALL => OpInfo::gas_block_end(0), // TODO: Reassess once AUTHCALL is impl'd
         0xF8 => OpInfo::none(),
         0xF9 => OpInfo::none(),
         STATICCALL => OpInfo::gas_block_end(0),
@@ -911,6 +911,7 @@ pub const fn spec_opcode_gas(spec_id: SpecId) -> &'static [OpInfo; 256] {
         MERGE,
         SHANGHAI,
         CANCUN,
+        PRAGUE,
         LATEST,
     )
 }

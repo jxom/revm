@@ -373,11 +373,17 @@ pub fn auth<H: Host, SPEC: Spec>(interpreter: &mut Interpreter<'_>, host: &mut H
     // Pop the signature offset and length off of the stack
     pop!(interpreter, signature_offset, signature_len);
 
-    // Grab the memory region for the input data
-    let mem_slice = interpreter.shared_memory.slice(
-        signature_offset.try_into().unwrap_or_default(),
-        signature_len.try_into().unwrap_or_default(),
-    );
+    let signature_offset = as_usize_or_fail!(interpreter, signature_offset);
+    let signature_len = as_usize_or_fail!(interpreter, signature_len);
+
+    // Charge the fixed cost for the `AUTH` opcode
+    gas!(interpreter, gas::AUTH);
+
+    // Grab the memory region for the input data and charge for any memory expansion
+    shared_memory_resize!(interpreter, signature_offset, signature_len);
+    let mem_slice = interpreter
+        .shared_memory
+        .slice(signature_offset, signature_len);
 
     // Pull the signature from the first 65 bytes of the memory region.
     let signature = {
@@ -398,14 +404,15 @@ pub fn auth<H: Host, SPEC: Spec>(interpreter: &mut Interpreter<'_>, host: &mut H
     });
 
     // Build the original auth message and compute the hash.
-    let mut message = [0u8; 96];
-    message[0..32].copy_from_slice(
+    let mut message = [0u8; 97];
+    message[0] = 0x03; // AUTH_MAGIC
+    message[1..33].copy_from_slice(
         U256::from(host.env().cfg.chain_id)
             .to_be_bytes::<32>()
             .as_ref(),
     );
-    message[32..64].copy_from_slice(interpreter.contract().address.into_word().as_ref());
-    message[64..96].copy_from_slice(commit.unwrap_or_default().as_ref());
+    message[33..65].copy_from_slice(interpreter.contract().address.into_word().as_ref());
+    message[65..97].copy_from_slice(commit.unwrap_or_default().as_ref());
     let message_hash = revm_primitives::keccak256(&message);
 
     // Verify the signature
@@ -415,7 +422,7 @@ pub fn auth<H: Host, SPEC: Spec>(interpreter: &mut Interpreter<'_>, host: &mut H
         push!(interpreter, U256::ZERO);
     } else {
         push!(interpreter, U256::from(1));
-        // TODO: Set `authorized` context.
+        interpreter.active_account = Some(authority);
     }
 }
 
@@ -454,15 +461,14 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
         CallScheme::AuthCall => {
             pop!(interpreter, value);
             value
-        },
+        }
     };
 
     if scheme == CallScheme::AuthCall {
         pop!(interpreter, ext_value);
-        // ext_value must be 0 or it reverts
+        // If `ext_value` is non-zero, then the `AUTHCALL` opcode immediately returns 0.
         if ext_value != U256::ZERO {
-            // TODO: new InstructionResult enum
-            interpreter.instruction_result = InstructionResult::FatalExternalError;
+            push!(interpreter, U256::ZERO);
             return;
         }
     };
@@ -510,13 +516,17 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
             scheme,
         },
         CallScheme::AuthCall => {
-            CallContext {
-                address: interpreter.contract.address,
-                // TODO: Should be auth caller, need context var
-                caller: interpreter.contract.caller,
-                code_address: to,
-                apparent_value: interpreter.contract.value, // TODO: Prob not correct, check spec
-                scheme,
+            if let Some(account) = interpreter.active_account {
+                CallContext {
+                    address: interpreter.contract.address,
+                    caller: account,
+                    code_address: to,
+                    apparent_value: value,
+                    scheme,
+                }
+            } else {
+                interpreter.instruction_result = InstructionResult::ActiveAccountUnsetAuthCall;
+                return;
             }
         }
     };
@@ -531,6 +541,12 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
         Transfer {
             source: interpreter.contract.address,
             target: interpreter.contract.address,
+            value,
+        }
+    } else if scheme == CallScheme::AuthCall {
+        Transfer {
+            source: interpreter.active_account.unwrap_or_default(),
+            target: to,
             value,
         }
     } else {
@@ -549,6 +565,7 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
     };
     let is_new = !exist;
 
+    // TODO(clabby): EIP-3074 - AuthCall needs coverage
     gas!(
         interpreter,
         gas::call_cost::<SPEC>(
@@ -597,6 +614,8 @@ pub fn call_inner<SPEC: Spec, H: Host>(
         CallScheme::DelegateCall => check!(interpreter, HOMESTEAD),
         // EIP-214: New opcode STATICCALL
         CallScheme::StaticCall => check!(interpreter, BYZANTIUM),
+        // EIP-3074: New opcode AUTHCALL
+        CallScheme::AuthCall => check!(interpreter, PRAGUE),
         _ => (),
     }
     interpreter.return_data_buffer = Bytes::new();
