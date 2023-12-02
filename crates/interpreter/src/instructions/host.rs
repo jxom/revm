@@ -560,7 +560,6 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
     };
     let is_new = !exist;
 
-    // TODO(clabby): EIP-3074 - AuthCall needs coverage
     gas!(
         interpreter,
         gas::call_cost::<SPEC>(
@@ -569,6 +568,7 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
             is_cold,
             matches!(scheme, CallScheme::Call | CallScheme::CallCode),
             matches!(scheme, CallScheme::Call | CallScheme::StaticCall),
+            matches!(scheme, CallScheme::AuthCall),
         )
     );
 
