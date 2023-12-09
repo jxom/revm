@@ -560,7 +560,6 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
     };
     let is_new = !exist;
 
-    // TODO(clabby): EIP-3074 - AuthCall needs coverage
     gas!(
         interpreter,
         gas::call_cost::<SPEC>(
@@ -569,11 +568,15 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
             is_cold,
             matches!(scheme, CallScheme::Call | CallScheme::CallCode),
             matches!(scheme, CallScheme::Call | CallScheme::StaticCall),
+            matches!(scheme, CallScheme::AuthCall),
         )
     );
 
     // EIP-150: Gas cost changes for IO-heavy operations
-    let mut gas_limit = if SPEC::enabled(TANGERINE) {
+    let mut gas_limit = if matches!(scheme, CallScheme::AuthCall) && local_gas_limit == 0 {
+        let gas = interpreter.gas().remaining();
+        gas - gas / 64
+    } else if SPEC::enabled(TANGERINE) {
         let gas = interpreter.gas().remaining();
         // take l64 part of gas_limit
         min(gas - gas / 64, local_gas_limit)
