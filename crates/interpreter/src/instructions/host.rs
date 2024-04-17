@@ -412,8 +412,11 @@ pub fn auth<H: Host, SPEC: Spec>(interpreter: &mut Interpreter<'_>, host: &mut H
             .to_be_bytes::<32>()
             .as_ref(),
     );
-    message[33..65]
-        .copy_from_slice(&U256::from(host.nonce(authority).unwrap()).to_be_bytes::<32>());
+    message[33..65].copy_from_slice(
+        U256::from(host.nonce(authority).unwrap())
+            .to_be_bytes::<32>()
+            .as_ref(),
+    );
     message[65..97].copy_from_slice(interpreter.contract().address.into_word().as_ref());
     message[97..129].copy_from_slice(commit.unwrap_or_default().as_ref());
     let message_hash = revm_primitives::keccak256(&message);
