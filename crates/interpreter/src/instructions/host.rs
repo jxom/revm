@@ -465,15 +465,6 @@ fn prepare_call_inputs<H: Host, SPEC: Spec>(
         }
     };
 
-    if scheme == CallScheme::AuthCall {
-        pop!(interpreter, ext_value);
-        // If `ext_value` is non-zero, then the `AUTHCALL` opcode immediately returns 0.
-        if ext_value != U256::ZERO {
-            push!(interpreter, U256::ZERO);
-            return;
-        }
-    };
-
     pop!(interpreter, in_offset, in_len, out_offset, out_len);
 
     let in_len = as_usize_or_fail!(interpreter, in_len);
