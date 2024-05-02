@@ -177,6 +177,13 @@ impl<DB: Database> InnerEvmContext<DB> {
         Ok((acc.info.code_hash, is_cold))
     }
 
+    /// Return account nonce.
+    pub fn nonce(&mut self, address: Address) -> Result<u64, EVMError<DB::Error>> {
+        self.journaled_state
+            .load_account(address, &mut self.db)
+            .map(|(acc, _)| acc.info.nonce)
+    }
+
     /// Load storage slot, if storage is not present inside the account then it will be loaded from database.
     #[inline]
     pub fn sload(

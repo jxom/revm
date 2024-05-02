@@ -295,6 +295,7 @@ pub const fn call_cost(
     transfers_value: bool,
     is_cold: bool,
     new_account_accounting: bool,
+    is_authcall: bool,
 ) -> u64 {
     // Account access.
     let mut gas = if spec_id.is_enabled_in(SpecId::BERLIN) {
@@ -308,7 +309,11 @@ pub const fn call_cost(
 
     // transfer value cost
     if transfers_value {
-        gas += CALLVALUE;
+        if is_authcall {
+            gas += AUTHCALLVALUE;
+        } else {
+            gas += CALLVALUE;
+        }
     }
 
     // new account cost
