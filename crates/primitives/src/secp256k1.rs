@@ -1,22 +1,24 @@
-//! secp256k1 wrapper
-
 pub use secp256k1::*;
 
 #[cfg(not(feature = "secp256k1"))]
 #[allow(clippy::module_inception)]
 mod secp256k1 {
-    use crate::keccak256;
-    use crate::B256;
+    use alloy_primitives::{keccak256, B256, B512};
     use k256::ecdsa::{Error, RecoveryId, Signature, VerifyingKey};
 
-    pub fn ecrecover(sig: &[u8; 65], msg: &B256) -> Result<B256, Error> {
+    pub fn ecrecover(sig: &B512, mut recid: u8, msg: &B256) -> Result<B256, Error> {
         // parse signature
-        let recid = RecoveryId::from_byte(sig[64]).expect("Recovery id is valid");
-        let signature = Signature::from_slice(&sig[..64])?;
+        let mut sig = Signature::from_slice(sig.as_slice())?;
+
+        // normalize signature and flip recovery id if needed.
+        if let Some(sig_normalized) = sig.normalize_s() {
+            sig = sig_normalized;
+            recid ^= 1;
+        }
+        let recid = RecoveryId::from_byte(recid).expect("recovery ID is valid");
 
         // recover key
-        let recovered_key = VerifyingKey::recover_from_prehash(&msg[..], &signature, recid)?;
-
+        let recovered_key = VerifyingKey::recover_from_prehash(&msg[..], &sig, recid)?;
         // hash it
         let mut hash = keccak256(
             &recovered_key
@@ -33,8 +35,7 @@ mod secp256k1 {
 #[cfg(feature = "secp256k1")]
 #[allow(clippy::module_inception)]
 mod secp256k1 {
-    use crate::keccak256;
-    use crate::B256;
+    use alloy_primitives::{keccak256, B256, B512};
     use secp256k1::{
         ecdsa::{RecoverableSignature, RecoveryId},
         Message, Secp256k1,
@@ -43,12 +44,13 @@ mod secp256k1 {
     // Silence the unused crate dependency warning.
     use k256 as _;
 
-    pub fn ecrecover(sig: &[u8; 65], msg: &B256) -> Result<B256, secp256k1::Error> {
-        let sig =
-            RecoverableSignature::from_compact(&sig[0..64], RecoveryId::from_i32(sig[64] as i32)?)?;
+    pub fn ecrecover(sig: &B512, recid: u8, msg: &B256) -> Result<B256, secp256k1::Error> {
+        let recid = RecoveryId::from_i32(recid as i32).expect("recovery ID is valid");
+        let sig = RecoverableSignature::from_compact(sig.as_slice(), recid)?;
 
         let secp = Secp256k1::new();
-        let public = secp.recover_ecdsa(&Message::from_digest_slice(&msg[..])?, &sig)?;
+        let msg = Message::from_digest(msg.0);
+        let public = secp.recover_ecdsa(&msg, &sig)?;
 
         let mut hash = keccak256(&public.serialize_uncompressed()[1..]);
         hash[..12].fill(0);
