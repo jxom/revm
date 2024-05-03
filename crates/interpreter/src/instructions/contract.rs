@@ -670,6 +670,15 @@ pub fn auth_call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, ho
         return;
     };
 
+    let authority = {
+        let authority = interpreter.authorized;
+        if interpreter.authorized.is_none() {
+            interpreter.instruction_result = InstructionResult::ActiveAccountUnsetAuthCall;
+            return;
+        }
+        authority.unwrap()
+    };
+
     gas!(interpreter, gas_limit);
 
     // Call host to interact with target contract
@@ -678,7 +687,7 @@ pub fn auth_call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, ho
             input,
             gas_limit,
             target_address: to,
-            caller: interpreter.authorized.unwrap(),
+            caller: authority,
             bytecode_address: to,
             value: CallValue::Transfer(value),
             scheme: CallScheme::AuthCall,
