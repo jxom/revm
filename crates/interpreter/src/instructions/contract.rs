@@ -258,6 +258,7 @@ pub fn extcall_gas_calc<H: Host + ?Sized>(
         transfers_value,
         load_result.is_cold,
         load_result.is_empty,
+        false,
     );
     gas!(interpreter, call_cost, None);
 
@@ -475,6 +476,7 @@ pub fn call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &
         has_transfer,
         is_empty,
         local_gas_limit,
+        false,
     ) else {
         return;
     };
@@ -526,6 +528,7 @@ pub fn call_code<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, ho
         value != U256::ZERO,
         false,
         local_gas_limit,
+        false,
     ) else {
         return;
     };
@@ -571,7 +574,7 @@ pub fn delegate_call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter
         return;
     };
     let Some(gas_limit) =
-        calc_call_gas::<H, SPEC>(interpreter, is_cold, false, false, local_gas_limit)
+        calc_call_gas::<H, SPEC>(interpreter, is_cold, false, false, local_gas_limit, false)
     else {
         return;
     };
@@ -613,7 +616,7 @@ pub fn static_call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
     };
 
     let Some(gas_limit) =
-        calc_call_gas::<H, SPEC>(interpreter, is_cold, false, false, local_gas_limit)
+        calc_call_gas::<H, SPEC>(interpreter, is_cold, false, false, local_gas_limit, false)
     else {
         return;
     };
@@ -630,6 +633,65 @@ pub fn static_call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, 
             value: CallValue::Transfer(U256::ZERO),
             scheme: CallScheme::StaticCall,
             is_static: true,
+            is_eof: false,
+            return_memory_offset,
+        }),
+    };
+    interpreter.instruction_result = InstructionResult::CallOrCreate;
+}
+
+pub fn auth_call<H: Host + ?Sized, SPEC: Spec>(interpreter: &mut Interpreter, host: &mut H) {
+    check!(interpreter, PRAGUE);
+    pop!(interpreter, local_gas_limit);
+    pop_address!(interpreter, to);
+    // max gas limit is not possible in real ethereum situation.
+    let local_gas_limit = u64::try_from(local_gas_limit).unwrap_or(u64::MAX);
+
+    pop!(interpreter, value);
+    
+    let has_transfer = value != U256::ZERO;
+
+    let Some((input, return_memory_offset)) = get_memory_input_and_out_ranges(interpreter) else {
+        return;
+    };
+
+    let Some(LoadAccountResult { is_cold, is_empty }) = host.load_account(to) else {
+        interpreter.instruction_result = InstructionResult::FatalExternalError;
+        return;
+    };
+    let Some(gas_limit) = calc_call_gas::<H, SPEC>(
+        interpreter,
+        is_cold,
+        has_transfer,
+        is_empty,
+        local_gas_limit,
+        true,
+    ) else {
+        return;
+    };
+
+    let authority = {
+        let authority = interpreter.authorized;
+        if interpreter.authorized.is_none() {
+            interpreter.instruction_result = InstructionResult::ActiveAccountUnsetAuthCall;
+            return;
+        }
+        authority.unwrap()
+    };
+
+    gas!(interpreter, gas_limit);
+
+    // Call host to interact with target contract
+    interpreter.next_action = InterpreterAction::Call {
+        inputs: Box::new(CallInputs {
+            input,
+            gas_limit,
+            target_address: to,
+            caller: authority,
+            bytecode_address: to,
+            value: CallValue::Transfer(value),
+            scheme: CallScheme::AuthCall,
+            is_static: interpreter.is_static,
             is_eof: false,
             return_memory_offset,
         }),

@@ -3,7 +3,7 @@ use crate::{
 };
 
 use super::Interpreter;
-use revm_primitives::Bytes;
+use revm_primitives::{Address, Bytes};
 use serde::de::{self, MapAccess, Visitor};
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -73,6 +73,7 @@ impl<'de> Deserialize<'de> for Interpreter {
             function_stack: FunctionStack,
             return_data_buffer: Bytes,
             is_static: bool,
+            authorized: Option<Address>,
             next_action: InterpreterAction,
         ) -> Result<Interpreter, &'static str> {
             // Reconstruct the instruction pointer from usize
@@ -97,6 +98,7 @@ impl<'de> Deserialize<'de> for Interpreter {
                 function_stack,
                 return_data_buffer,
                 is_static,
+                authorized,
                 next_action,
             })
         }
@@ -145,6 +147,7 @@ impl<'de> Deserialize<'de> for Interpreter {
                     function_stack,
                     return_data_buffer,
                     is_static,
+                    None,
                     next_action,
                 )
                 .map_err(de::Error::custom)
@@ -202,6 +205,7 @@ impl<'de> Deserialize<'de> for Interpreter {
                     function_stack,
                     return_data_buffer,
                     is_static,
+                    None,
                     next_action,
                 )
                 .map_err(de::Error::custom)

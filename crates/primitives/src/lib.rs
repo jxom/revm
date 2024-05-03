@@ -18,6 +18,7 @@ pub mod env;
 pub mod kzg;
 pub mod precompile;
 pub mod result;
+pub mod secp256k1;
 pub mod specification;
 pub mod state;
 pub mod utilities;

@@ -420,6 +420,7 @@ pub enum HaltReason {
     /* Internal Halts that can be only found inside Inspector */
     OverflowPayment,
     StateChangeDuringStaticCall,
+    ActiveAccountUnsetAuthCall,
     CallNotAllowedInsideStatic,
     OutOfFunds,
     CallTooDeep,

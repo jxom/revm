@@ -51,13 +51,17 @@ pub fn calc_call_gas<H: Host + ?Sized, SPEC: Spec>(
     has_transfer: bool,
     new_account_accounting: bool,
     local_gas_limit: u64,
+    is_authcall: bool,
 ) -> Option<u64> {
-    let call_cost = gas::call_cost(SPEC::SPEC_ID, has_transfer, is_cold, new_account_accounting);
+    let call_cost = gas::call_cost(SPEC::SPEC_ID, has_transfer, is_cold, new_account_accounting, is_authcall);
 
     gas!(interpreter, call_cost, None);
 
     // EIP-150: Gas cost changes for IO-heavy operations
-    let gas_limit = if SPEC::enabled(TANGERINE) {
+    let gas_limit = if (is_authcall) && local_gas_limit == 0 {
+        let gas = interpreter.gas().remaining();
+        gas - gas / 64
+    } else if SPEC::enabled(TANGERINE) {
         let gas = interpreter.gas().remaining();
         // take l64 part of gas_limit
         min(gas - gas / 64, local_gas_limit)
