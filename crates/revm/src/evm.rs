@@ -429,6 +429,14 @@ impl<EXT, DB: Database> Host for Evm<'_, EXT, DB> {
             .ok()
     }
 
+    fn nonce(&mut self, address: Address) -> Option<u64> {
+        self.context
+            .evm
+            .nonce(address)
+            .map_err(|e| self.context.evm.error = Err(e))
+            .ok()
+    }
+
     fn sload(&mut self, address: Address, index: U256) -> Option<(U256, bool)> {
         self.context
             .evm

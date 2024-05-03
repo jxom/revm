@@ -28,6 +28,7 @@ pub enum InstructionResult {
     OpcodeNotFound,
     CallNotAllowedInsideStatic,
     StateChangeDuringStaticCall,
+    ActiveAccountUnsetAuthCall,
     InvalidFEOpcode,
     InvalidJump,
     NotActivated,
@@ -84,6 +85,7 @@ impl From<HaltReason> for InstructionResult {
             HaltReason::CreateInitCodeSizeLimit => Self::CreateInitCodeSizeLimit,
             HaltReason::OverflowPayment => Self::OverflowPayment,
             HaltReason::StateChangeDuringStaticCall => Self::StateChangeDuringStaticCall,
+            HaltReason::ActiveAccountUnsetAuthCall => Self::ActiveAccountUnsetAuthCall,
             HaltReason::CallNotAllowedInsideStatic => Self::CallNotAllowedInsideStatic,
             HaltReason::OutOfFunds => Self::OutOfFunds,
             HaltReason::CallTooDeep => Self::CallTooDeep,
@@ -121,6 +123,7 @@ macro_rules! return_error {
             | InstructionResult::OpcodeNotFound
             | InstructionResult::CallNotAllowedInsideStatic
             | InstructionResult::StateChangeDuringStaticCall
+            | InstructionResult::ActiveAccountUnsetAuthCall
             | InstructionResult::InvalidFEOpcode
             | InstructionResult::InvalidJump
             | InstructionResult::NotActivated
@@ -236,6 +239,9 @@ impl From<InstructionResult> for SuccessOrHalt {
             } // first call is not static call
             InstructionResult::StateChangeDuringStaticCall => {
                 Self::Halt(HaltReason::StateChangeDuringStaticCall)
+            }
+            InstructionResult::ActiveAccountUnsetAuthCall => {
+                Self::Halt(HaltReason::ActiveAccountUnsetAuthCall)
             }
             InstructionResult::InvalidFEOpcode => Self::Halt(HaltReason::InvalidFEOpcode),
             InstructionResult::InvalidJump => Self::Halt(HaltReason::InvalidJump),

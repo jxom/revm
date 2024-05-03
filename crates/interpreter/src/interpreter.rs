@@ -13,7 +13,7 @@ use crate::{
     CreateInputs, CreateOutcome, Gas, Host, InstructionResult,
 };
 use core::cmp::min;
-use revm_primitives::U256;
+use revm_primitives::{Address, U256};
 use std::borrow::ToOwned;
 use std::boxed::Box;
 
@@ -44,6 +44,8 @@ pub struct Interpreter {
     pub return_data_buffer: Bytes,
     /// Whether the interpreter is in "staticcall" mode, meaning no state changes can happen.
     pub is_static: bool,
+    /// EIP-3074: Active account for `AUTHCALL` instructions in the current execution frame.
+    pub authorized: Option<Address>,
     /// Actions that the EVM should do.
     ///
     /// Set inside CALL or CREATE instructions and RETURN or REVERT instructions. Additionally those instructions will set
@@ -125,6 +127,7 @@ impl Interpreter {
             return_data_buffer: Bytes::new(),
             shared_memory: EMPTY_SHARED_MEMORY,
             stack: Stack::new(),
+            authorized: None,
             next_action: InterpreterAction::None,
         }
     }

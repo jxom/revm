@@ -10,7 +10,7 @@ use crate::{
     SStoreResult, Transfer, MAX_INITCODE_SIZE,
 };
 use core::cmp::min;
-use revm_primitives::BLOCK_HASH_HISTORY;
+use revm_primitives::{alloy_primitives::B512, Address, BLOCK_HASH_HISTORY};
 use std::{boxed::Box, vec::Vec};
 
 pub fn balance<H: Host, SPEC: Spec>(interpreter: &mut Interpreter, host: &mut H) {
@@ -338,6 +338,7 @@ pub fn call<H: Host, SPEC: Spec>(interpreter: &mut Interpreter, host: &mut H) {
         local_gas_limit,
         true,
         true,
+        false,
     ) else {
         return;
     };
@@ -393,6 +394,7 @@ pub fn call_code<H: Host, SPEC: Spec>(interpreter: &mut Interpreter, host: &mut 
         local_gas_limit,
         true,
         false,
+        false,
     ) else {
         return;
     };
@@ -441,7 +443,7 @@ pub fn delegate_call<H: Host, SPEC: Spec>(interpreter: &mut Interpreter, host: &
     };
 
     let Some(gas_limit) =
-        calc_call_gas::<H, SPEC>(interpreter, host, to, false, local_gas_limit, false, false)
+        calc_call_gas::<H, SPEC>(interpreter, host, to, false, local_gas_limit, false, false, false)
     else {
         return;
     };
@@ -488,7 +490,7 @@ pub fn static_call<H: Host, SPEC: Spec>(interpreter: &mut Interpreter, host: &mu
     };
 
     let Some(gas_limit) =
-        calc_call_gas::<H, SPEC>(interpreter, host, to, false, local_gas_limit, false, true)
+        calc_call_gas::<H, SPEC>(interpreter, host, to, false, local_gas_limit, false, true, false)
     else {
         return;
     };
@@ -519,4 +521,131 @@ pub fn static_call<H: Host, SPEC: Spec>(interpreter: &mut Interpreter, host: &mu
         }),
     };
     interpreter.instruction_result = InstructionResult::CallOrCreate;
+}
+
+pub fn auth_call<H: Host, SPEC: Spec>(interpreter: &mut Interpreter, host: &mut H) {
+    pop!(interpreter, local_gas_limit);
+    pop_address!(interpreter, to);
+    // max gas limit is not possible in real ethereum situation.
+    let local_gas_limit = u64::try_from(local_gas_limit).unwrap_or(u64::MAX);
+
+    pop!(interpreter, value);
+
+    let Some((input, return_memory_offset)) = get_memory_input_and_out_ranges(interpreter) else {
+        return;
+    };
+
+    let Some(mut gas_limit) = calc_call_gas::<H, SPEC>(
+        interpreter,
+        host,
+        to,
+        value != U256::ZERO,
+        local_gas_limit,
+        false,
+        false,
+        true,
+    ) else {
+        return;
+    };
+
+    gas!(interpreter, gas_limit);
+
+    // add call stipend if there is value to be transferred.
+    if value != U256::ZERO {
+        gas_limit = gas_limit.saturating_add(gas::CALL_STIPEND);
+    }
+
+    let authority = {
+        let authority = interpreter.authorized;
+        if interpreter.authorized.is_none() {
+            interpreter.instruction_result = InstructionResult::ActiveAccountUnsetAuthCall;
+            return;
+        }
+        authority.unwrap()
+    };
+
+    // Call host to interact with target contract
+    interpreter.next_action = InterpreterAction::Call {
+        inputs: Box::new(CallInputs {
+            contract: to,
+            transfer: Transfer {
+                source: authority,
+                target: to,
+                value,
+            },
+            input,
+            gas_limit,
+            context: CallContext {
+                address: to,
+                caller: authority,
+                code_address: to,
+                apparent_value: value,
+                scheme: CallScheme::Call,
+            },
+            is_static: interpreter.is_static,
+            return_memory_offset,
+        }),
+    };
+    interpreter.instruction_result = InstructionResult::CallOrCreate;
+}
+
+pub fn auth<H: Host, SPEC: Spec>(interpreter: &mut Interpreter, host: &mut H) {
+    // Pop the `authority` off of the stack
+    pop_address!(interpreter, authority);
+    // Pop the signature offset and length off of the stack
+    pop!(interpreter, signature_offset, signature_len);
+
+    let signature_offset = as_usize_or_fail!(interpreter, signature_offset);
+    let signature_len = as_usize_or_fail!(interpreter, signature_len);
+
+    // Charge the fixed cost for the `AUTH` opcode
+    gas!(interpreter, gas::AUTH);
+
+    // Grab the memory region for the input data and charge for any memory expansion
+    resize_memory!(interpreter, signature_offset, signature_len);
+    let mem_slice = interpreter
+        .shared_memory
+        .slice(signature_offset, signature_len);
+
+    // recId (yParity) is the first byte.
+    let recid = mem_slice[0];
+    // signature (r & s values) are the next 64 bytes.
+    let signature = <&B512>::try_from(&mem_slice[1..65]).unwrap();
+    let sig_len = signature.len() + 1;
+
+    // If the memory region is longer than 65 bytes, pull the commit from the next [1, 32] bytes.
+    let commit = (mem_slice.len() > sig_len).then(|| {
+        let mut buf = B256::ZERO;
+        let remaining = mem_slice.len() - sig_len;
+        let cpy_size = (remaining > 32).then_some(32).unwrap_or(remaining);
+        buf[0..remaining].copy_from_slice(&mem_slice[sig_len..sig_len + cpy_size]);
+        buf
+    });
+
+    // Build the original auth message and compute the hash.
+    let mut message = [0u8; 129];
+    message[0] = 0x04; // AUTH_MAGIC - add constant?
+    message[1..33].copy_from_slice(
+        U256::from(host.env().cfg.chain_id)
+            .to_be_bytes::<32>()
+            .as_ref(),
+    );
+    message[33..65].copy_from_slice(
+        U256::from(host.nonce(authority).unwrap())
+            .to_be_bytes::<32>()
+            .as_ref(),
+    );
+    message[65..97].copy_from_slice(interpreter.contract().address.into_word().as_ref());
+    message[97..129].copy_from_slice(commit.unwrap_or_default().as_ref());
+    let message_hash = revm_primitives::keccak256(&message);
+
+    // Verify the signature
+    let recovered = revm_primitives::secp256k1::ecrecover(&signature, recid, &message_hash);
+
+    if recovered.is_err() || Address::from_word(recovered.unwrap_or_default()) != authority {
+        push!(interpreter, U256::ZERO);
+    } else {
+        push!(interpreter, U256::from(1));
+        interpreter.authorized = Some(authority);
+    }
 }

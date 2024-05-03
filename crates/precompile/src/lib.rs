@@ -65,6 +65,7 @@ impl Precompiles {
             PrecompileSpecId::ISTANBUL => Self::istanbul(),
             PrecompileSpecId::BERLIN => Self::berlin(),
             PrecompileSpecId::CANCUN => Self::cancun(),
+            PrecompileSpecId::PRAGUE => Self::prague(),
             PrecompileSpecId::LATEST => Self::latest(),
         }
     }
@@ -156,6 +157,19 @@ impl Precompiles {
         })
     }
 
+    /// Returns precompiles for Cancun spec.
+    ///
+    /// If the `c-kzg` feature is not enabled KZG Point Evaluation precompile will not be included,
+    /// effectively making this the same as Berlin.
+    pub fn prague() -> &'static Self {
+        static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
+        INSTANCE.get_or_init(|| {
+            let precompiles = Self::cancun().clone();
+
+            Box::new(precompiles)
+        })
+    }
+
     /// Returns the precompiles for the latest spec.
     pub fn latest() -> &'static Self {
         Self::cancun()
@@ -231,6 +245,7 @@ pub enum PrecompileSpecId {
     ISTANBUL,
     BERLIN,
     CANCUN,
+    PRAGUE,
     LATEST,
 }
 
@@ -246,6 +261,7 @@ impl PrecompileSpecId {
             ISTANBUL | MUIR_GLACIER => Self::ISTANBUL,
             BERLIN | LONDON | ARROW_GLACIER | GRAY_GLACIER | MERGE | SHANGHAI => Self::BERLIN,
             CANCUN => Self::CANCUN,
+            PRAGUE => Self::PRAGUE,
             LATEST => Self::LATEST,
             #[cfg(feature = "optimism")]
             BEDROCK | REGOLITH | CANYON => Self::BERLIN,

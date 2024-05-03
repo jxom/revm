@@ -42,6 +42,7 @@ pub fn calc_call_gas<H: Host, SPEC: Spec>(
     local_gas_limit: u64,
     is_call_or_callcode: bool,
     is_call_or_staticcall: bool,
+    is_authcall: bool,
 ) -> Option<u64> {
     let Some((is_cold, exist)) = host.load_account(to) else {
         interpreter.instruction_result = InstructionResult::FatalExternalError;
@@ -55,6 +56,7 @@ pub fn calc_call_gas<H: Host, SPEC: Spec>(
         is_cold,
         is_call_or_callcode,
         is_call_or_staticcall,
+        is_authcall,
     );
 
     gas!(interpreter, call_cost, None);
